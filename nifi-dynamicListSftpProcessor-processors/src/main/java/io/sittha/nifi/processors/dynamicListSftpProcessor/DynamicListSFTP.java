@@ -44,18 +44,68 @@ import java.util.Set;
 @WritesAttributes({@WritesAttribute(attribute="", description="")})
 public class DynamicListSFTP extends AbstractProcessor {
 
-    public static final PropertyDescriptor MY_PROPERTY = new PropertyDescriptor
+    public static final PropertyDescriptor HOSTNAME = new PropertyDescriptor
             .Builder()
-            .name("My Property")
-            .displayName("My Property")
-            .description("Example Property")
+            .name("Hostname")
+            .displayName("Hostname")
+            .description("The hostname of the SFTP server")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
 
+    public static final PropertyDescriptor PORT = new PropertyDescriptor
+            .Builder()
+            .name("Port")
+            .displayName("Port")
+            .description("The port of the SFTP server")
+            .required(true)
+            .addValidator(StandardValidators.PORT_VALIDATOR)
+            .defaultValue("22")
+            .build();
+
+    public static final PropertyDescriptor USERNAME = new PropertyDescriptor
+            .Builder()
+            .name("Username")
+            .displayName("Username")
+            .description("The username to connect to the SFTP server")
+            .required(true)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor PASSWORD = new PropertyDescriptor
+            .Builder()
+            .name("Password")
+            .displayName("Password")
+            .description("The password to connect to the SFTP server")
+            .required(true)
+            .sensitive(true)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .build();
+
+    public static final PropertyDescriptor REMOTE_PATH = new PropertyDescriptor
+            .Builder()
+            .name("Remote Path")
+            .displayName("Remote Path")
+            .description("The remote path to list files from")
+            .required(true)
+            .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
+            .defaultValue(".")
+            .build();
+
+    public static final PropertyDescriptor IGNORE_DOTTED_FILES = new PropertyDescriptor
+            .Builder()
+            .name("Ignore Dotted Files")
+            .displayName("Ignore Dotted Files")
+            .description("Whether to ignore files that start with a dot (.)")
+            .required(true)
+            .defaultValue("true")
+            .allowableValues("true", "false")
+            .addValidator(StandardValidators.BOOLEAN_VALIDATOR)
+            .build();
+
     public static final Relationship REL_SUCCESS = new Relationship.Builder()
             .name("success")
-            .description("Example success relationship")
+            .description("All files that are successfully listed are routed to this relationship")
             .build();
 
     private List<PropertyDescriptor> descriptors;
@@ -64,7 +114,14 @@ public class DynamicListSFTP extends AbstractProcessor {
 
     @Override
     protected void init(final ProcessorInitializationContext context) {
-        descriptors = List.of(MY_PROPERTY);
+        descriptors = List.of(
+                HOSTNAME,
+                PORT,
+                USERNAME,
+                PASSWORD,
+                REMOTE_PATH,
+                IGNORE_DOTTED_FILES
+        );
 
         relationships = Set.of(REL_SUCCESS);
     }
