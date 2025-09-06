@@ -40,20 +40,18 @@ import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClientFactory;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-@Tags({"files, ingest, input, list, remote, sftp, source"})
+@Tags({ "files, ingest, input, list, remote, sftp, source" })
 @CapabilityDescription("Provide a description")
 @SeeAlso({})
-@ReadsAttributes({@ReadsAttribute(attribute="", description="")})
-@WritesAttributes({@WritesAttribute(attribute="", description="")})
+@ReadsAttributes({ @ReadsAttribute(attribute = "", description = "") })
+@WritesAttributes({ @WritesAttribute(attribute = "", description = "") })
 public class DynamicListSFTP extends AbstractProcessor {
 
-    public static final PropertyDescriptor HOSTNAME = new PropertyDescriptor
-            .Builder()
+    public static final PropertyDescriptor HOSTNAME = new PropertyDescriptor.Builder()
             .name("Hostname")
             .displayName("Hostname")
             .description("The hostname of the SFTP server")
@@ -62,8 +60,7 @@ public class DynamicListSFTP extends AbstractProcessor {
             .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
-    public static final PropertyDescriptor PORT = new PropertyDescriptor
-            .Builder()
+    public static final PropertyDescriptor PORT = new PropertyDescriptor.Builder()
             .name("Port")
             .displayName("Port")
             .description("The port of the SFTP server")
@@ -73,8 +70,7 @@ public class DynamicListSFTP extends AbstractProcessor {
             .defaultValue("22")
             .build();
 
-    public static final PropertyDescriptor USERNAME = new PropertyDescriptor
-            .Builder()
+    public static final PropertyDescriptor USERNAME = new PropertyDescriptor.Builder()
             .name("Username")
             .displayName("Username")
             .description("The username to connect to the SFTP server")
@@ -83,8 +79,7 @@ public class DynamicListSFTP extends AbstractProcessor {
             .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
-    public static final PropertyDescriptor PASSWORD = new PropertyDescriptor
-            .Builder()
+    public static final PropertyDescriptor PASSWORD = new PropertyDescriptor.Builder()
             .name("Password")
             .displayName("Password")
             .description("The password to connect to the SFTP server")
@@ -94,8 +89,7 @@ public class DynamicListSFTP extends AbstractProcessor {
             .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
-    public static final PropertyDescriptor REMOTE_PATH = new PropertyDescriptor
-            .Builder()
+    public static final PropertyDescriptor REMOTE_PATH = new PropertyDescriptor.Builder()
             .name("Remote Path")
             .displayName("Remote Path")
             .description("The remote path to list files from")
@@ -105,8 +99,7 @@ public class DynamicListSFTP extends AbstractProcessor {
             .defaultValue(".")
             .build();
 
-    public static final PropertyDescriptor IGNORE_DOTTED_FILES = new PropertyDescriptor
-            .Builder()
+    public static final PropertyDescriptor IGNORE_DOTTED_FILES = new PropertyDescriptor.Builder()
             .name("Ignore Dotted Files")
             .displayName("Ignore Dotted Files")
             .description("Whether to ignore files that start with a dot (.)")
@@ -122,6 +115,11 @@ public class DynamicListSFTP extends AbstractProcessor {
             .description("All files that are successfully listed are routed to this relationship")
             .build();
 
+    public static final Relationship REL_FAILURE = new Relationship.Builder()
+            .name("failure")
+            .description("FlowFiles are routed here if listing SFTP fails")
+            .build();
+
     private List<PropertyDescriptor> descriptors;
 
     private Set<Relationship> relationships;
@@ -134,10 +132,9 @@ public class DynamicListSFTP extends AbstractProcessor {
                 USERNAME,
                 PASSWORD,
                 REMOTE_PATH,
-                IGNORE_DOTTED_FILES
-        );
+                IGNORE_DOTTED_FILES);
 
-        relationships = Set.of(REL_SUCCESS);
+        relationships = Set.of(REL_SUCCESS, REL_FAILURE);
     }
 
     @Override
@@ -161,15 +158,17 @@ public class DynamicListSFTP extends AbstractProcessor {
 
         FlowFile inputFlowFile = session.get();
         if (inputFlowFile == null) {
-                return;
+            return;
         }
 
         String hostname = context.getProperty(HOSTNAME).evaluateAttributeExpressions(inputFlowFile).getValue();
-        Integer port = Integer.parseInt(context.getProperty(PORT).evaluateAttributeExpressions(inputFlowFile).getValue());
+        Integer port = Integer
+                .parseInt(context.getProperty(PORT).evaluateAttributeExpressions(inputFlowFile).getValue());
         String username = context.getProperty(USERNAME).evaluateAttributeExpressions(inputFlowFile).getValue();
         String password = context.getProperty(PASSWORD).evaluateAttributeExpressions(inputFlowFile).getValue();
         String remotePath = context.getProperty(REMOTE_PATH).evaluateAttributeExpressions(inputFlowFile).getValue();
-        boolean ignoreDottedFiles = context.getProperty(IGNORE_DOTTED_FILES).evaluateAttributeExpressions(inputFlowFile).asBoolean();
+        boolean ignoreDottedFiles = context.getProperty(IGNORE_DOTTED_FILES).evaluateAttributeExpressions(inputFlowFile)
+                .asBoolean();
 
         SshClient client = SshClient.setUpDefaultClient();
         client.start();
@@ -178,43 +177,46 @@ public class DynamicListSFTP extends AbstractProcessor {
                 .verify(10, TimeUnit.SECONDS)
                 .getSession()) {
 
-                sshSession.addPasswordIdentity(password);
-                sshSession.auth().verify(10, TimeUnit.SECONDS);
+            sshSession.addPasswordIdentity(password);
+            sshSession.auth().verify(10, TimeUnit.SECONDS);
 
-                try (SftpClient sftp = SftpClientFactory.instance().createSftpClient(sshSession)) {
+            try (SftpClient sftp = SftpClientFactory.instance().createSftpClient(sshSession)) {
 
-                        for (SftpClient.DirEntry entry : sftp.readDir(remotePath)) {
+                for (SftpClient.DirEntry entry : sftp.readDir(remotePath)) {
 
-                                if (ignoreDottedFiles && entry.getFilename().startsWith(".")) {
-                                        logger.info("Ignoring dotted file: {}", new Object[]{entry.getFilename()});
-                                        continue;
-                                }
+                    if (ignoreDottedFiles && entry.getFilename().startsWith(".")) {
+                        logger.info("Ignoring dotted file: {}", new Object[] { entry.getFilename() });
+                        continue;
+                    }
 
-                                if (entry.getAttributes().isDirectory()) {
-                                        logger.info("Ignoring directory: {}", new Object[]{entry.getFilename()});
-                                        continue;
-                                }
+                    if (entry.getAttributes().isDirectory()) {
+                        logger.info("Ignoring directory: {}", new Object[] { entry.getFilename() });
+                        continue;
+                    }
 
-                                FlowFile outputFlowFile = session.create(inputFlowFile);
+                    FlowFile outputFlowFile = session.create(inputFlowFile);
 
-                                outputFlowFile = session.putAttribute(outputFlowFile, "filename", entry.getFilename());
-                                outputFlowFile = session.putAttribute(outputFlowFile, "filesize", String.valueOf(entry.getAttributes().getSize()));
-                                outputFlowFile = session.putAttribute(outputFlowFile, "filetype", String.valueOf(entry.getAttributes().getType()));
-                                outputFlowFile = session.putAttribute(outputFlowFile, "path", remotePath);
+                    outputFlowFile = session.putAttribute(outputFlowFile, "filename", entry.getFilename());
+                    outputFlowFile = session.putAttribute(outputFlowFile, "filesize",
+                            String.valueOf(entry.getAttributes().getSize()));
+                    outputFlowFile = session.putAttribute(outputFlowFile, "filetype",
+                            String.valueOf(entry.getAttributes().getType()));
+                    outputFlowFile = session.putAttribute(outputFlowFile, "path", remotePath);
 
-                                session.transfer(outputFlowFile, REL_SUCCESS);
-                                logger.info("Created FlowFile for remote entry: {}", new Object[]{entry.getFilename()});
-                        }
-
-                        session.remove(inputFlowFile);
+                    session.transfer(outputFlowFile, REL_SUCCESS);
+                    logger.info("Created FlowFile for remote entry: {}", new Object[] { entry.getFilename() });
                 }
 
-        } catch (IOException e) {
-                logger.error("Failed to list remote directory", e);
-                session.transfer(inputFlowFile, REL_SUCCESS); // ถ้าต้องการส่ง input ต่อไป
+                session.remove(inputFlowFile);
+            }
+
+        } catch (Exception e) {
+            getLogger().error("Failed to list SFTP directory", e);
+            // ส่ง input FlowFile ไป REL_FAILURE แทน
+            session.transfer(inputFlowFile, REL_FAILURE);
         } finally {
-                client.stop();
+            client.stop();
         }
-        }
+    }
 
 }
